@@ -1,0 +1,27 @@
+## Step 1:
+    We look at if there is a robot.txt file, it is a text file, its placement is at the root of the website. It aims to ban robots of search engines the indexing of certain areas of your website.
+
+## Step 2 : 
+On the url '/robots.txt' we find a dir called 'whatever'.
+
+We access it and it turns out a file with username and password.
+
+We use those credentials to login as admin on the url '/admin' to get the flag.
+
+We copy the hash 437394baff5aa33daa618be47b75cb49 from the file downloaded and we use an online hash cracker (CrackStation) to decode it.
+
+So the complete login credentials are:
+
+    Username: root
+
+    Password: qwerty123@
+
+## Prevention:
+
+- Do not store sensitive information (like credentials or hashes) in publicly accessible files such as robots.txt.
+
+- robots.txt is meant for search engine guidance, not security—it can be accessed by anyone.
+
+- Protect sensitive directories using authentication, authorization, or move them outside the web root.
+
+- Use environment variables or secure server-side storage for credentials.
