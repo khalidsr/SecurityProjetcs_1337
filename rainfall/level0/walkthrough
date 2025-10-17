@@ -1,0 +1,61 @@
+In the first Level0 there is some new concept we will exploit them:
+
+Kernel Security:
+
+GCC Stack Protector: Enabled - detects buffer overflows on the stack
+
+Strict user copy checks: Disabled - doesn't validate kernel/userspace memory copies strictly
+/dev/mem & /dev/kmem restrictions: Physical memory access is restricted
+
+grsecurity/PaX & Kernel Heap Hardening: Not present - no advanced kernel hardening patches
+ASLR (Address Space Layout Randomization): Off - memory addresses are predictable (major weakness)
+
+Binary Security (/home/user/level0/level0):
+
+No RELRO: Relocations can be overwritten (vulnerable to GOT overwrites)
+No canary: No stack overflow protection
+NX enabled: Stack is non-executable (can't run shellcode on stack)
+No PIE: Binary loads at fixed address (predictable)
+No RPATH/RUNPATH: No hardcoded library paths
+
+We list the files will show us 'level0' executable :
+```
+level0@RainFall:~$ ls -la
+total 737
+dr-xr-x---+ 1 level0 level0     60 Mar  6  2016 .
+dr-x--x--x  1 root   root      340 Sep 23  2015 ..
+-rw-r--r--  1 level0 level0    220 Apr  3  2012 .bash_logout
+-rw-r--r--  1 level0 level0   3530 Sep 23  2015 .bashrc
+-rwsr-x---+ 1 level1 users  747441 Mar  6  2016 level0
+-rw-r--r--  1 level0 level0    675 Apr  3  2012 .profile
+level0@RainFall:~$ 
+
+level0@RainFall:~$ ./level0
+Segmentation fault (core dumped)
+level0@RainFall:~$ ./level0 fff
+No !
+level0@RainFall:~$
+```
+The program segfault without parameters and print "No !" with a parameter.
+
+After analyze it with gdb we can find just a main().
+
+The function 'atoi' is called. Then, the binary compares the first arg with the number 423.
+By passing 423 as the firt argument, the program calls setuid, getuid and use execv to start a new /bin/sh process.
+
+level0@RainFall:~$ ./level0 423
+$ whoami
+level1
+$ cat /home/user/level1/.pass
+1fe8a524fa4bec01ca4ea2a869af2a02260d4a7d5fe7e7c24d8617e6dca12d3a
+$ exit
+
+level0@RainFall:~$ su level1
+
+Password:
+
+RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE
+
+No RELRO        No canary found   NX disabled   No PIE          No RPATH   No RUNPATH   /
+home/user/level1/level1
+level1@RainFall:~$

