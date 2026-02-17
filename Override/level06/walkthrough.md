@@ -44,6 +44,8 @@ Constant	Value	Meaning
 We can implement the algorithm in Python to generate a serial for any username:
 
 ```python
+import sys
+
 def generate_serial(username):
     if len(username) <= 5:
         return None
@@ -56,6 +58,22 @@ def generate_serial(username):
         serial += (ord(c) ^ serial) % 0x539
     
     return serial
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit(1)
+    
+    username = sys.argv[1].strip()
+    
+    result = generate_serial(username)
+    
+    if result is None:
+        print("Error: username", username, "is too short (must be > 5 characters)")
+    else:
+        print("Serial for", username, result)
+
+
 ```
 
 # Step 3: Execute the Exploit
@@ -77,4 +95,5 @@ $ cat /home/users/level07/.pass
 GbcPDRgsFK77LNnnuh7QyFYA2942Gp8yKj9KrWD8
 $ 
 ```
+
 
