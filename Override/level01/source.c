@@ -1,6 +1,5 @@
 #include "out.h"
 
-
 // binary ninja
 int32_t verify_user_name()
 {

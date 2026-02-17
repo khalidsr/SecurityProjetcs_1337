@@ -141,6 +141,6 @@ int32_t main() {
     else {  // Child process
         ptrace(PTRACE_TRACEME, 0, 0, 0);
         puts("Give me some shellcode, k");
-        gets(&buf);  // ⚠️ Buffer overflow!
+        gets(&buf);  //  Buffer overflow!
     }
 }

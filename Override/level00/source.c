@@ -1,7 +1,6 @@
 #include "out.h"
 
 
-
 bool main(void)
 
 {

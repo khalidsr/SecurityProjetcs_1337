@@ -92,3 +92,4 @@ int32_t main(int32_t argc, char** argv, char** envp)
     printf(&var_78);  // <--- FORMAT STRING VULNERABILITY
     exit(0);
 }
+

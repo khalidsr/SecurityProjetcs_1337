@@ -365,7 +365,7 @@ int32_t main(int32_t argc, char** argv, char** envp)
     return 0;
 }
 
-
+//// simplified
 
 void decrypt(int key) 
 {
